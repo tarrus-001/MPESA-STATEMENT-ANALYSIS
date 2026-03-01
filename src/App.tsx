@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { CustomerLookup } from './components/CustomerLookup';
 import { CustomerList } from './components/CustomerList';
@@ -12,10 +12,12 @@ type TabType = 'dashboard' | 'lookup' | 'customers' | 'add' | 'history' | 'mpesa
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [appReady, setAppReady] = useState(false);
+  const handleReady = useCallback(() => setAppReady(true), []);
 
   return (
     <>
-      <InitializeData />
+      <InitializeData onReady={handleReady} />
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
@@ -103,12 +105,23 @@ export default function App() {
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'lookup' && <CustomerLookup />}
-          {activeTab === 'customers' && <CustomerList />}
-          {activeTab === 'add' && <AddCustomer />}
-          {activeTab === 'mpesa' && <MpesaUpload />}
-          {activeTab === 'history' && <CreditHistory />}
+          {!appReady ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-500">Loading system data…</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'lookup' && <CustomerLookup />}
+              {activeTab === 'customers' && <CustomerList />}
+              {activeTab === 'add' && <AddCustomer />}
+              {activeTab === 'mpesa' && <MpesaUpload />}
+              {activeTab === 'history' && <CreditHistory />}
+            </>
+          )}
         </main>
       </div>
     </>

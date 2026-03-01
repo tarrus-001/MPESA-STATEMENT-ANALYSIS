@@ -10,6 +10,7 @@ export function CustomerList() {
   const [filterRisk, setFilterRisk] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'name' | 'score' | 'risk'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [editingCustomer, setEditingCustomer] = useState<any>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -82,8 +83,6 @@ export function CustomerList() {
       setSortOrder('asc');
     }
   };
-
-  const [editingCustomer, setEditingCustomer] = useState<any>(null);
 
   const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
@@ -204,43 +203,71 @@ export function CustomerList() {
               </tr>
             </thead>
             <tbody>
-              {filteredCustomers.map((customer) => (
-                <tr key={customer.id} className="border-b hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium">{customer.name}</td>
-                  <td className="py-3 px-4 font-mono text-sm">{customer.idNumber}</td>
-                  <td className="py-3 px-4 text-sm">{customer.phoneNumber}</td>
-                  <td className="py-3 px-4">
-                    <span className={`font-bold ${getScoreColor(customer.creditScore)}`}>
-                      {customer.creditScore}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(customer.riskLevel)}`}>
-                      {customer.riskLevel}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-sm">{customer.numberOfLoans}</td>
-                  <td className="py-3 px-4 text-sm">KSh {customer.totalLoansAmount.toLocaleString()}</td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => setEditingCustomer(customer)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        title="Edit Customer"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(customer.id, customer.name)}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                        title="Delete Customer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center">
+                    <div className="flex flex-col items-center gap-3 text-gray-400">
+                      <Users className="w-12 h-12 opacity-30" />
+                      <p className="text-base font-medium text-gray-500">
+                        {customers.length === 0
+                          ? 'No customers found'
+                          : 'No customers match your filters'}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {customers.length === 0
+                          ? 'Add your first customer using the "Add Customer" tab.'
+                          : 'Try adjusting your search or filter criteria.'}
+                      </p>
+                      {customers.length === 0 && (
+                        <button
+                          onClick={loadCustomers}
+                          className="mt-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Refresh
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCustomers.map((customer) => (
+                  <tr key={customer.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium">{customer.name}</td>
+                    <td className="py-3 px-4 font-mono text-sm">{customer.idNumber}</td>
+                    <td className="py-3 px-4 text-sm">{customer.phoneNumber}</td>
+                    <td className="py-3 px-4">
+                      <span className={`font-bold ${getScoreColor(customer.creditScore)}`}>
+                        {customer.creditScore}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(customer.riskLevel)}`}>
+                        {customer.riskLevel}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm">{customer.numberOfLoans}</td>
+                    <td className="py-3 px-4 text-sm">KSh {customer.totalLoansAmount.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setEditingCustomer(customer)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Edit Customer"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(customer.id, customer.name)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Delete Customer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -3,6 +3,39 @@ import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import * as kv from './kv_store.tsx';
 
+// ---------------------------------------------------------------------------
+// Deterministic pseudo-random number generator (LCG)
+// Seeded from the file's properties so identical documents always produce
+// identical analysis results.
+// ---------------------------------------------------------------------------
+
+/** djb2 hash – converts any string to a stable 32-bit integer seed. */
+function hashSeed(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0; // keep unsigned 32-bit
+  }
+  return hash || 1; // never 0
+}
+
+/** Linear Congruential Generator – deterministic given the same seed. */
+class SeededRandom {
+  private state: number;
+  constructor(seed: number) {
+    this.state = seed >>> 0;
+  }
+  /** Returns a float in [0, 1) */
+  next(): number {
+    // Parameters from Numerical Recipes
+    this.state = (Math.imul(1664525, this.state) + 1013904223) >>> 0;
+    return this.state / 0x100000000;
+  }
+  /** Returns an integer in [min, max] */
+  nextInt(min: number, max: number): number {
+    return Math.floor(this.next() * (max - min + 1)) + min;
+  }
+}
+
 const app = new Hono();
 
 // Middleware
@@ -228,41 +261,54 @@ app.post('/make-server-f9f965c0/mpesa/analyze', async (c) => {
   try {
     const { customerId, fileName, fileSize } = await c.req.json();
 
-    // Simulate M-Pesa analysis
+    // Derive a stable seed from the file's identity so that re-analyzing
+    // the same document always returns the same results.
+    const seed = hashSeed(`${fileName}:${fileSize}`);
+    const rng = new SeededRandom(seed);
+
+    // Build analysis using the deterministic RNG
+    const totalTransactions = rng.nextInt(150, 350);
+    const totalInflow = rng.nextInt(250000, 450000);
+    const totalOutflow = rng.nextInt(200000, 380000);
+    const consistentIncome = rng.next() > 0.3;
+    const savingsBehavior = rng.next() > 0.5 ? 'Good' : 'Moderate';
+    const averageBalance = totalInflow - totalOutflow;
+
+    const scoreImpact = averageBalance > 0 && consistentIncome
+      ? rng.nextInt(30, 60)
+      : -(rng.nextInt(6, 25));
+
+    const riskIndicators: string[] = [];
+    if (!consistentIncome) {
+      riskIndicators.push('Irregular income pattern detected');
+    }
+    if (totalOutflow > totalInflow) {
+      riskIndicators.push('Spending exceeds income');
+    }
+
+    // Generate monthly data deterministically
+    const monthlyData = Array.from({ length: 6 }, (_, i) => ({
+      month: new Date(2025, 7 + i, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      inflow: rng.nextInt(50000, 70000),
+      outflow: rng.nextInt(45000, 60000),
+    }));
+
     const analysis = {
       id: Date.now().toString(),
       customerId,
       fileName,
       fileSize,
-      totalTransactions: Math.floor(Math.random() * 200) + 150,
-      totalInflow: Math.floor(Math.random() * 200000) + 250000,
-      totalOutflow: Math.floor(Math.random() * 180000) + 200000,
-      averageBalance: 0,
-      consistentIncome: Math.random() > 0.3,
-      savingsBehavior: Math.random() > 0.5 ? 'Good' : 'Moderate',
-      riskIndicators: [],
-      scoreImpact: 0,
+      totalTransactions,
+      totalInflow,
+      totalOutflow,
+      averageBalance,
+      consistentIncome,
+      savingsBehavior,
+      riskIndicators,
+      scoreImpact,
+      monthlyData,
       analyzedAt: new Date().toISOString(),
     };
-
-    analysis.averageBalance = analysis.totalInflow - analysis.totalOutflow;
-    analysis.scoreImpact = analysis.averageBalance > 0 && analysis.consistentIncome ?
-      Math.floor(Math.random() * 30) + 30 :
-      Math.floor(Math.random() * 20) - 25;
-
-    if (!analysis.consistentIncome) {
-      analysis.riskIndicators.push('Irregular income pattern detected');
-    }
-    if (analysis.totalOutflow > analysis.totalInflow) {
-      analysis.riskIndicators.push('Spending exceeds income');
-    }
-
-    // Generate monthly data
-    analysis.monthlyData = Array.from({ length: 6 }, (_, i) => ({
-      month: new Date(2025, 7 + i, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      inflow: Math.floor(Math.random() * 20000) + 50000,
-      outflow: Math.floor(Math.random() * 15000) + 45000,
-    }));
 
     await kv.set(`mpesa:${analysis.id}`, analysis);
 
@@ -306,15 +352,15 @@ app.get('/make-server-f9f965c0/activities', async (c) => {
 // Seed initial data if empty
 app.post('/make-server-f9f965c0/seed', async (c) => {
   try {
-    const existingCustomers = await kv.getByPrefix('customer:');
-
-    if (existingCustomers.length > 0) {
+    // Check by the specific new seed key so we re-seed even if old data exists
+    const alreadySeeded = await kv.get('customer:seed-1');
+    if (alreadySeeded) {
       return c.json({ success: true, message: 'Data already seeded' });
     }
 
     const seedCustomers = [
       {
-        id: '1',
+        id: 'seed-1',
         name: 'John Kamau',
         idNumber: '12345678',
         phoneNumber: '+254 712 345 678',
@@ -329,7 +375,7 @@ app.post('/make-server-f9f965c0/seed', async (c) => {
         createdAt: new Date().toISOString(),
       },
       {
-        id: '2',
+        id: 'seed-2',
         name: 'Mary Wanjiku',
         idNumber: '23456789',
         phoneNumber: '+254 723 456 789',
@@ -344,7 +390,7 @@ app.post('/make-server-f9f965c0/seed', async (c) => {
         createdAt: new Date().toISOString(),
       },
       {
-        id: '3',
+        id: 'seed-3',
         name: 'Grace Achieng',
         idNumber: '45678901',
         phoneNumber: '+254 745 678 901',
@@ -358,13 +404,88 @@ app.post('/make-server-f9f965c0/seed', async (c) => {
         totalLoansAmount: 80000,
         createdAt: new Date().toISOString(),
       },
+      {
+        id: 'seed-4',
+        name: 'Peter Otieno',
+        idNumber: '34567890',
+        phoneNumber: '+254 734 567 890',
+        email: 'peter.otieno@email.com',
+        creditScore: 490,
+        riskLevel: 'High',
+        paymentHistory: 55,
+        creditUtilization: 85,
+        creditHistoryMonths: 12,
+        numberOfLoans: 6,
+        totalLoansAmount: 420000,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'seed-5',
+        name: 'Fatuma Hassan',
+        idNumber: '56789012',
+        phoneNumber: '+254 756 789 012',
+        email: 'fatuma.hassan@email.com',
+        creditScore: 655,
+        riskLevel: 'Medium',
+        paymentHistory: 82,
+        creditUtilization: 50,
+        creditHistoryMonths: 36,
+        numberOfLoans: 3,
+        totalLoansAmount: 195000,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'seed-6',
+        name: 'Samuel Mwangi',
+        idNumber: '67890123',
+        phoneNumber: '+254 767 890 123',
+        email: 'samuel.mwangi@email.com',
+        creditScore: 810,
+        riskLevel: 'Low',
+        paymentHistory: 99,
+        creditUtilization: 10,
+        creditHistoryMonths: 72,
+        numberOfLoans: 1,
+        totalLoansAmount: 50000,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'seed-7',
+        name: 'Aisha Mohamed',
+        idNumber: '78901234',
+        phoneNumber: '+254 778 901 234',
+        email: 'aisha.mohamed@email.com',
+        creditScore: 540,
+        riskLevel: 'High',
+        paymentHistory: 60,
+        creditUtilization: 78,
+        creditHistoryMonths: 18,
+        numberOfLoans: 5,
+        totalLoansAmount: 360000,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'seed-8',
+        name: 'David Kipchoge',
+        idNumber: '89012345',
+        phoneNumber: '+254 789 012 345',
+        email: 'david.kipchoge@email.com',
+        creditScore: 695,
+        riskLevel: 'Medium',
+        paymentHistory: 88,
+        creditUtilization: 40,
+        creditHistoryMonths: 30,
+        numberOfLoans: 2,
+        totalLoansAmount: 120000,
+        createdAt: new Date().toISOString(),
+      },
     ];
 
     for (const customer of seedCustomers) {
       await kv.set(`customer:${customer.id}`, customer);
     }
 
-    return c.json({ success: true, message: 'Data seeded successfully' });
+    return c.json({ success: true, message: `Seeded ${seedCustomers.length} customers successfully` });
   } catch (error) {
     console.log('Error seeding data:', error);
     return c.json({ success: false, error: String(error) }, 500);
